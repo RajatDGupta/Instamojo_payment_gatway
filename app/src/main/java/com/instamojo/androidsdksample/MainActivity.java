@@ -1,4 +1,4 @@
-package com.instamojo.androidsdksample;
+package com.example.user.salaryin.payment;
 
 import android.app.ProgressDialog;
 import android.content.Intent;
@@ -6,11 +6,19 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.AppCompatEditText;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
 
+import com.example.user.salaryin.BuildConfig;
+import com.example.user.salaryin.Network.ApiClient;
+import com.example.user.salaryin.POJO.Fetch_Token_Pojo;
+import com.example.user.salaryin.R;
+import com.example.user.salaryin.Service.ServiceAPI;
+import com.example.user.salaryin.Session.TrypuneSession;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.instamojo.android.Instamojo;
@@ -20,30 +28,27 @@ import com.instamojo.android.helpers.Constants;
 import com.instamojo.android.models.Errors;
 import com.instamojo.android.models.Order;
 import com.instamojo.android.network.Request;
-import com.instamojo.androidsdksample.InterFace.ServiceAPI;
-import com.instamojo.androidsdksample.POJO.Fetch_Token_Pojo;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.Callback;
-import okhttp3.FormBody;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
-public class MainActivity extends AppCompatActivity {
+public class InstaMojoActivity extends AppCompatActivity {
 
-    /*for getting token these three constant requird
+ /*for getting token these three constant requird
     * documentation https://docs.instamojo.com/page/android-sdk*
     *
     * to get tokent url=https://test.instamojo.com/oauth2/token/************/
@@ -51,7 +56,8 @@ public class MainActivity extends AppCompatActivity {
     public static final String client_id = "d1EKYiJzoiAAEUmG4cipMNqbQryFEKeKyovzph6i";
     public static final String client_secret = "DIt2iUDSShQqozV1rHl7SWqMxcXkQVM2FKVRzLMIaFydErfQ2Vif3JqPj3OtWT36foNqZt2yX74TMmsGWMLIfnmwnR1JpSGUMP4FO7NUsGgYlbN9rYapfykvAjB8TUSA";
     public static final String grant_type = "client_credentials";
-
+    
+    
     private static class DefaultHeadersInterceptor implements Interceptor {
         @Override
         public Response intercept(Chain chain) throws IOException {
@@ -73,17 +79,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private static final HashMap<String, String> env_options = new HashMap<>();
 
-    static {
-        env_options.put("Test", "https://test.instamojo.com/");
-        env_options.put("Production", "https://api.instamojo.com/");
-    }
-
+    public String client_id = null;
+    public String client_secret = null;
+    public String grant_type = null;
+    TrypuneSession trypuneSession;
+    public String user_Name, user_Id, user_Email, user_Amount, user_Desc, user_Mobile, address, pincode, add_pin, date;
     private ProgressDialog dialog;
-    private AppCompatEditText nameBox, emailBox, phoneBox, amountBox, descriptionBox;
+    private AppCompatEditText nameBox, emailBox, phoneBox, amountBox, descriptionBox, addressBox, pincodeBox;
+    Button button;
     private String currentEnv = null;
     private String accessToken = null;
+
 
     private static OkHttpClient client = new OkHttpClient.Builder()
             .addInterceptor(new DefaultHeadersInterceptor())
@@ -92,97 +99,116 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_instamojo);
 
-        Button button = (Button) findViewById(R.id.pay);
+        getConstants();
+        valueFromSession();
+        initView();
+        toolBar();
 
-        nameBox = (AppCompatEditText) findViewById(R.id.name);
-        nameBox.setSelection(nameBox.getText().toString().trim().length());
-
-        emailBox = (AppCompatEditText) findViewById(R.id.email);
-        emailBox.setSelection(emailBox.getText().toString().trim().length());
-
-        phoneBox = (AppCompatEditText) findViewById(R.id.phone);
-        phoneBox.setSelection(phoneBox.getText().toString().trim().length());
-
-        amountBox = (AppCompatEditText) findViewById(R.id.amount);
-        amountBox.setSelection(amountBox.getText().toString().trim().length());
-
-        descriptionBox = (AppCompatEditText) findViewById(R.id.description);
-        descriptionBox.setSelection(descriptionBox.getText().toString().trim().length());
 
         currentEnv = "https://api.instamojo.com/";
         Instamojo.setBaseUrl(currentEnv);
 
-        /*AppCompatSpinner envSpinner = (AppCompatSpinner) findViewById(R.id.env_spinner);
-        final ArrayList<String> envs = new ArrayList<>(env_options.keySet());
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, envs);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        envSpinner.setAdapter(adapter);
-        envSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                currentEnv = envs.get(position);
-                Instamojo.setBaseUrl(env_options.get(currentEnv));
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-
-            }
-        });*/
 
         dialog = new ProgressDialog(this);
         dialog.setIndeterminate(true);
         dialog.setMessage("Please wait...");
         dialog.setCancelable(false);
+
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // fetchTokenAndTransactionID();
-                fetchAccessToken();
+                if (validate()) {
+                    fetchAccessToken();
+                }
             }
         });
+
 
         //let's set the log level to debug
         Instamojo.setLogLevel(Log.DEBUG);
     }
 
+    private void toolBar() {
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        getSupportActionBar().setTitle("Payment Details");
 
-   /* // this is for the market place
-    // you should have created the order from your backend and pass back the order id to app for the payment
-    private void fetchOrder(String accessToken, String orderID) {
-        // Good time to show dialog
-        Request request = new Request(accessToken, orderID, new OrderRequestCallBack() {
-            @Override
-            public void onFinish(final Order order, final Exception error) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        dialog.dismiss();
-                        if (error != null) {
-                            if (error instanceof Errors.ConnectionError) {
-                                showToast("No internet connection");
-                            } else if (error instanceof Errors.ServerError) {
-                                showToast("Server error. Try again");
-                            } else if (error instanceof Errors.AuthenticationError) {
-                                showToast("Access token is invalid or expired. Please update the token");
-                            } else {
-                                showToast(error.toString());
-                            }
-                            return;
-                        }
+    }
 
-                        startPreCreatedUI(order);
-                    }
-                });
+    private void initView() {
+        button = (Button) findViewById(R.id.pay);
 
-            }
-        });
+        nameBox = (AppCompatEditText) findViewById(R.id.name);
+        nameBox.setText(user_Name);
 
-        request.execute();
-    }*/
+        emailBox = (AppCompatEditText) findViewById(R.id.email);
+        emailBox.setText(user_Email);
 
+        phoneBox = (AppCompatEditText) findViewById(R.id.phone);
+        phoneBox.setText(user_Mobile);
+
+        addressBox = (AppCompatEditText) findViewById(R.id.address);
+
+        pincodeBox = (AppCompatEditText) findViewById(R.id.pincode);
+
+        amountBox = (AppCompatEditText) findViewById(R.id.amount);
+        amountBox.setText(user_Amount);
+
+        descriptionBox = (AppCompatEditText) findViewById(R.id.description);
+        descriptionBox.setText(user_Desc);
+    }
+
+    private void valueFromSession() {
+        trypuneSession = new TrypuneSession(getApplicationContext());
+
+        HashMap<String, String> user = trypuneSession.getUserDetails();
+
+        user_Name = user.get(TrypuneSession.KEY_NAME);
+        user_Id = user.get(TrypuneSession.KEY_ID);
+        user_Email = user.get(TrypuneSession.KEY_EMAIL);
+        user_Amount = user.get(TrypuneSession.KEY_AMOUNT);
+        user_Desc = user.get(TrypuneSession.KEY_DESC);
+        user_Mobile = user.get(TrypuneSession.KEY_MOBILE);
+    }
+
+    private void getConstants() {
+        client_id = PaymentConstants.client_id;
+        client_secret = PaymentConstants.client_secret;
+        grant_type = PaymentConstants.grant_type;
+    }
+
+    public String repayDate() {
+        Calendar c = Calendar.getInstance();
+        int mYear = c.get(Calendar.YEAR); // current year
+        int mMonth = c.get(Calendar.MONTH); // current month
+        int mDay = c.get(Calendar.DAY_OF_MONTH); // current day
+        return Integer.toString(mDay) + "/" + Integer.toString(mMonth + 1) + "/" + Integer.toString(mYear);
+
+    }
+
+    /*************************validation*********************************/
+    public boolean validate() {
+        String validate_address = addressBox.getText().toString().trim();
+        String validate_pincode = pincodeBox.getText().toString().trim();
+
+        if (validate_address.isEmpty()) {
+            addressBox.setFocusable(true);
+            addressBox.setError("please enter valid address");
+            return false;
+        }
+        if (validate_pincode.length() < 6) {
+            pincodeBox.setFocusable(true);
+            pincodeBox.setError("please enter valid pincode");
+            return false;
+        }
+        return true;
+    }
+
+
+    /**********************************instamojo create order***************************************/
     private void createOrder(String accessToken, String transactionID) {
 
         String name = nameBox.getText().toString();
@@ -305,6 +331,8 @@ public class MainActivity extends AppCompatActivity {
         request.execute();
     }
 
+
+    /*************instamojo create UI********************/
     private void startPreCreatedUI(Order order) {
         //Using Pre created UI
         Intent intent = new Intent(getBaseContext(), PaymentDetailsActivity.class);
@@ -312,24 +340,18 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, Constants.REQUEST_CODE);
     }
 
-    /* private void startCustomUI(Order order) {
-         //Custom UI Implementation
-         Intent intent = new Intent(getBaseContext(), CustomUIActivity.class);
-         intent.putExtra(Constants.ORDER, order);
-         startActivityForResult(intent, Constants.REQUEST_CODE);
-     }
- */
+
+    /*************instamojo custom toast********************/
     private void showToast(final String message) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-
                 Toast.makeText(getBaseContext(), message, Toast.LENGTH_LONG).show();
             }
         });
     }
 
-
+    /*************instamojo create Token********************/
     private void fetchAccessToken() {
 
         if (!dialog.isShowing()) {
@@ -409,84 +431,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Fetch Access token and unique transactionID from developers server
-     */
-   /* private void fetchTokenAndTransactionID() {
-        if (!dialog.isShowing()) {
-            dialog.show();
-        }
-
-        HttpUrl url = getHttpURLBuilder()
-                .addPathSegment("create")
-                .build();
-
-        RequestBody body = new FormBody.Builder()
-                .add("env", currentEnv.toLowerCase())
-                .build();
-
-        okhttp3.Request request = new okhttp3.Request.Builder()
-                .url(url)
-                .post(body)
-                .build();
-
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (dialog != null && dialog.isShowing()) {
-                            dialog.dismiss();
-                        }
-
-                        showToast("Failed to fetch the Order Tokens");
-                    }
-                });
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                String responseString;
-                String errorMessage = null;
-                String transactionID = null;
-                responseString = response.body().string();
-                response.body().close();
-                try {
-                    JSONObject responseObject = new JSONObject(responseString);
-                    if (responseObject.has("error")) {
-                        errorMessage = responseObject.getString("error");
-                    } else {
-                        accessToken = responseObject.getString("access_token");
-                        transactionID = responseObject.getString("transaction_id");
-                    }
-                } catch (JSONException e) {
-                    errorMessage = "Failed to fetch order tokens";
-                }
-
-                final String finalErrorMessage = errorMessage;
-                final String finalTransactionID = transactionID;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (dialog != null && dialog.isShowing()) {
-                            dialog.dismiss();
-                        }
-
-                        if (finalErrorMessage != null) {
-                            showToast(finalErrorMessage);
-                            return;
-                        }
-
-                        createOrder(accessToken, finalTransactionID);
-                    }
-                });
-
-            }
-        });
-
-    }*/
-
-    /**
      * Will check for the transaction status of a particular Transaction
      *
      * @param transactionID Unique identifier of a transaction ID
@@ -553,6 +497,7 @@ public class MainActivity extends AppCompatActivity {
                 final String finalErrorMessage = errorMessage;
                 final String finalPaymentID = paymentID;
                 final String finalAmount = amount;
+
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -567,89 +512,38 @@ public class MainActivity extends AppCompatActivity {
                         if (!finalStatus.equalsIgnoreCase("successful")) {
                             showToast("Transaction still pending");
                             return;
-                        }
-
-                        showToast("Transaction successful for id - " + finalPaymentID);
-                        refundTheAmount(transactionID, finalAmount);
-                    }
-                });
-            }
-        });
-
-    }
-
-    /**
-     * Will initiate a refund for a given transaction with given amount
-     * <p>
-     * //@param transactionID Unique identifier for the transaction
-     * //@param amount        amount to be refunded
-     */
-
-    private void refundTheAmount(String transactionID, String amount) {
-        if (accessToken == null || transactionID == null || amount == null) {
-            return;
-        }
-
-        if (dialog != null && !dialog.isShowing()) {
-            dialog.show();
-        }
-
-        showToast("Initiating a refund for - " + amount);
-        HttpUrl url = getHttpURLBuilder()
-                .addPathSegment("refund")
-                .addPathSegment("")
-                .build();
-
-        RequestBody body = new FormBody.Builder()
-                .add("env", currentEnv.toLowerCase())
-                .add("transaction_id", transactionID)
-                .add("amount", amount)
-                .add("type", "PTH")
-                .add("body", "Refund the Amount")
-                .build();
-
-        okhttp3.Request request = new okhttp3.Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .post(body)
-                .build();
-
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (dialog != null && dialog.isShowing()) {
-                            dialog.dismiss();
-                        }
-                        showToast("Failed to Initiate a refund");
-                    }
-                });
-            }
-
-            @Override
-            public void onResponse(Call call, final Response response) throws IOException {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (dialog != null && dialog.isShowing()) {
-                            dialog.dismiss();
-                        }
-                        String message;
-
-                        if (response.isSuccessful()) {
-                            message = "Refund initiated successfully";
                         } else {
-                            message = "Failed to initiate a refund";
+
+                            address = addressBox.getText().toString().trim();
+                            pincode = pincodeBox.getText().toString().trim();
+                            add_pin = address + " " + pincode;
+                            date = repayDate();
+
+                            ServiceAPI serviceAPI = ApiClient.getRetrofit().create(ServiceAPI.class);
+                            retrofit2.Call<Fetch_Token_Pojo> pojoCall = serviceAPI.storeStatus(user_Id, finalPaymentID, date, finalAmount, finalStatus, add_pin);
+                            pojoCall.enqueue(new retrofit2.Callback<Fetch_Token_Pojo>() {
+                                @Override
+                                public void onResponse(retrofit2.Call<Fetch_Token_Pojo> call, retrofit2.Response<Fetch_Token_Pojo> response) {
+
+                                    showToast("Transaction successful for id - " + finalPaymentID);
+                                }
+
+                                @Override
+                                public void onFailure(retrofit2.Call<Fetch_Token_Pojo> call, Throwable t) {
+
+                                }
+                            });
                         }
 
-                        showToast(message);
+                        showToast("Transaction successful for id - " + finalStatus);
+
                     }
                 });
             }
         });
+
     }
+
 
     private HttpUrl.Builder getHttpURLBuilder() {
         return new HttpUrl.Builder()
@@ -665,12 +559,28 @@ public class MainActivity extends AppCompatActivity {
             String transactionID = data.getStringExtra(Constants.TRANSACTION_ID);
             String paymentID = data.getStringExtra(Constants.PAYMENT_ID);
 
-            // Check transactionID, orderID, and orderID for null before   them to check the Payment status.
+            // Check transactionID, orderID, and orderID for null before using them to check the Payment status.
             if (transactionID != null || paymentID != null) {
                 checkPaymentStatus(transactionID, orderID);
             } else {
                 showToast("Oops!! Payment was cancelled");
             }
         }
+    }
+
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+
+        switch (item.getItemId()) {
+
+            case android.R.id.home:
+
+                onBackPressed();
+
+                return true;
+        }
+
+        return super.onOptionsItemSelected(item);
     }
 }
